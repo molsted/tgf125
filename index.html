@@ -203,18 +203,30 @@ loadTeams();
 async function getPlayers(team) {
   const { data, error } = await supabase
     .from("votes")
-    .select("player")
+    .select("player, player_number")
     .eq("team", team)
-    .neq("player", "placeholder")   // ← udelad placeholder
-    .order("player");
+    .neq("player", "placeholder")
+    .order("player_number");
 
   if (error) {
     console.error("Fejl ved hentning af spillere:", error);
     return [];
   }
 
-  return [...new Set(data.map(row => row.player))];
+  // Fjern dubletter baseret på navn
+  const unique = new Map();
+  data.forEach(row => {
+    if (!unique.has(row.player)) {
+      unique.set(row.player, {
+        name: row.player,
+        number: row.player_number
+      });
+    }
+  });
+
+  return [...unique.values()];
 }
+
 
 
 let selectedTeam = null;
@@ -246,7 +258,7 @@ window.selectTeam = async function(team) {
   players.forEach(p => {
     const btn = document.createElement("button");
     btn.className = "btn";
-    btn.textContent = p;
+    btn.textContent = `${p.number} – ${p.name}`;
     btn.onclick = () => vote(team, p);
     container.appendChild(btn);
   });
