@@ -235,6 +235,7 @@ let selectedTeam = null;
 window.selectTeam = async function(team) {
   selectedTeam = team;
 
+  // Tjek om brugeren allerede har stemt på dette hold
   const { data } = await supabase
     .from("user_votes")
     .select("*")
@@ -247,6 +248,7 @@ window.selectTeam = async function(team) {
     return;
   }
 
+  // Vis spillere
   document.getElementById("teams").style.display = "none";
   document.getElementById("players").style.display = "block";
 
@@ -259,10 +261,11 @@ window.selectTeam = async function(team) {
     const btn = document.createElement("button");
     btn.className = "btn";
     btn.textContent = `${p.number} – ${p.name}`;
-    btn.onclick = () => vote(team, p);
+    btn.onclick = () => vote(team, p.name);
     container.appendChild(btn);
   });
 };
+
 
 // STEM
 async function vote(team, player) {
