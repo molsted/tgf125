@@ -11,7 +11,6 @@ body {
   margin: 0;
   padding: 20px;
 
-  /* 0–75% hvid, 75–100% fade til grøn */
   background: linear-gradient(
     to bottom,
     #ffffff 0%,
@@ -23,7 +22,6 @@ body {
   color: #244c2f;
 }
 
-/* Overskrifter */
 h2 {
   text-align: center;
   font-size: 28px;
@@ -32,7 +30,6 @@ h2 {
   color: rgb(52, 115, 61);
 }
 
-/* Kort / bokse */
 .card {
   background: white;
   padding: 20px;
@@ -42,7 +39,6 @@ h2 {
   border-left: 6px solid rgb(52, 115, 61);
 }
 
-/* Knapper */
 .btn {
   width: 100%;
   padding: 18px;
@@ -63,13 +59,18 @@ h2 {
   box-shadow: 0 6px 16px rgba(72, 145, 82, 0.4);
 }
 
-/* Fade animation */
+.locked {
+  background: #bbb !important;
+  color: #666 !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Hero sektion */
 .hero {
   text-align: center;
   padding: 70px 20px 50px;
@@ -98,17 +99,6 @@ h2 {
   border-radius: 3px;
 }
 
-@media (max-width: 600px) {
-  .hero h1 {
-    font-size: 32px;
-  }
-  .hero img {
-    max-width: 140px;
-  }
-  .accent-line {
-    width: 90px;
-  }
-}
 </style>
 </head>
 
@@ -126,6 +116,9 @@ h2 {
 
 <div id="players" class="card" style="display:none;">
   <h2>Vælg spiller</h2>
+
+  <button class="btn" style="background:#ccc;color:#333;" onclick="goBack()">Tilbage</button>
+
   <div id="playerButtons"></div>
 </div>
 
@@ -137,69 +130,24 @@ const supabase = createClient(
   "sb_publishable_Mz0WlM2TToSWghb8TORA4w_EUZHT6Iz"
 );
 
-// Unikt device ID
+// DEVICE ID
 let deviceId = localStorage.getItem("device_id");
 if (!deviceId) {
   deviceId = crypto.randomUUID();
   localStorage.setItem("device_id", deviceId);
 }
 
-// HENT HOLD (DISTINCT)
-async function loadTeams() {
-  const { data, error } = await supabase
-    .from("votes")
-    .select("team, match_time")
-    .order("match_time");
+// HENT HOLD DER ER STEMT PÅ
+async function getVotedTeams() {
+  const { data } = await supabase
+    .from("user_votes")
+    .select("team")
+    .eq("device_id", deviceId);
 
-  if (error) {
-    console.error("Fejl ved hentning af hold:", error);
-    return;
-  }
-
-  // Gruppér efter match_time
-  const groups = {};
-  data.forEach(row => {
-    if (!groups[row.match_time]) groups[row.match_time] = new Set();
-    groups[row.match_time].add(row.team);
-  });
-
-  const container = document.getElementById("teams");
-  container.innerHTML = "";
-
-  // Sortér tider (tekstsortering virker fordi alle tider er HH.MM)
-  const sortedTimes = Object.keys(groups).sort();
-
-  sortedTimes.forEach(time => {
-    // Tilføj overskrift for tidsgruppe
-    const h = document.createElement("h3");
-    h.textContent = `Kamp kl. ${time}`;
-    h.style.textAlign = "center";
-    h.style.color = "rgb(52,115,61)";
-    container.appendChild(h);
-
-    // Tilføj knapper for hold i denne tidsgruppe
-// Sortér så Tjæreborg altid står først
-const sortedTeams = Array.from(groups[time]).sort((a, b) => {
-  if (a.toLowerCase().includes("tjæreborg")) return -1;
-  if (b.toLowerCase().includes("tjæreborg")) return 1;
-  return a.localeCompare(b);
-});
-
-sortedTeams.forEach(team => {
-  const btn = document.createElement("button");
-  btn.className = "btn";
-  btn.textContent = team;
-  btn.onclick = () => selectTeam(team);
-  container.appendChild(btn);
-});
-
-  });
+  return data ? data.map(r => r.team) : [];
 }
 
-
-loadTeams();
-
-// HENT SPILLERE (DISTINCT)
+// HENT SPILLERE
 async function getPlayers(team) {
   const { data, error } = await supabase
     .from("votes")
@@ -208,12 +156,8 @@ async function getPlayers(team) {
     .neq("player", "placeholder")
     .order("player_number");
 
-  if (error) {
-    console.error("Fejl ved hentning af spillere:", error);
-    return [];
-  }
+  if (error) return [];
 
-  // Fjern dubletter baseret på navn
   const unique = new Map();
   data.forEach(row => {
     if (!unique.has(row.player)) {
@@ -227,15 +171,72 @@ async function getPlayers(team) {
   return [...unique.values()];
 }
 
+// LOAD TEAMS
+async function loadTeams() {
+  const { data, error } = await supabase
+    .from("votes")
+    .select("team, match_time")
+    .order("match_time");
 
+  if (error) return;
 
-let selectedTeam = null;
+  const votedTeams = await getVotedTeams();
+
+  const groups = {};
+  data.forEach(row => {
+    if (!groups[row.match_time]) groups[row.match_time] = new Set();
+    groups[row.match_time].add(row.team);
+  });
+
+  const container = document.getElementById("teams");
+  container.innerHTML = "";
+
+  const sortedTimes = Object.keys(groups).sort();
+
+  sortedTimes.forEach(time => {
+    const h = document.createElement("h3");
+    h.textContent = `Kamp kl. ${time}`;
+    h.style.textAlign = "center";
+    h.style.color = "rgb(52,115,61)";
+    container.appendChild(h);
+
+    const sortedTeams = Array.from(groups[time]).sort((a, b) => {
+      const aT = a.toLowerCase().includes("tjæreborg");
+      const bT = b.toLowerCase().includes("tjæreborg");
+      if (aT && !bT) return -1;
+      if (!aT && bT) return 1;
+      return a.localeCompare(b);
+    });
+
+    sortedTeams.forEach(team => {
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.textContent = team;
+
+      if (votedTeams.includes(team)) {
+        btn.classList.add("locked");
+        btn.disabled = true;
+      } else {
+        btn.onclick = () => selectTeam(team);
+      }
+
+      container.appendChild(btn);
+    });
+  });
+}
+
+loadTeams();
+
+// GÅ TILBAGE
+window.goBack = function() {
+  document.getElementById("players").style.display = "none";
+  document.getElementById("teams").style.display = "block";
+};
 
 // VÆLG HOLD
 window.selectTeam = async function(team) {
   selectedTeam = team;
 
-  // Tjek om brugeren allerede har stemt på dette hold
   const { data } = await supabase
     .from("user_votes")
     .select("*")
@@ -248,7 +249,6 @@ window.selectTeam = async function(team) {
     return;
   }
 
-  // Vis spillere
   document.getElementById("teams").style.display = "none";
   document.getElementById("players").style.display = "block";
 
@@ -266,7 +266,6 @@ window.selectTeam = async function(team) {
   });
 };
 
-
 // STEM
 async function vote(team, player) {
   await supabase.rpc("increment_vote", {
@@ -281,8 +280,12 @@ async function vote(team, player) {
   });
 
   alert("Tak for din stemme!");
-  location.reload();
+
+  document.getElementById("players").style.display = "none";
+  await loadTeams();
+  document.getElementById("teams").style.display = "block";
 }
+
 </script>
 
 </body>
