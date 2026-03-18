@@ -6,71 +6,123 @@
 <title>Kampens Spiller</title>
 
 <style>
-  body { 
-    font-family: 'Segoe UI', Arial, sans-serif;
-    margin: 0;
-    padding: 20px;
-    background: linear-gradient(180deg, #e9f0ff, #f7f9ff);
-    color: #222;
-  }
+body { 
+  font-family: 'Segoe UI', Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
 
-  h2 {
-    text-align: center;
-    font-size: 28px;
-    margin-bottom: 20px;
-    font-weight: 700;
-    color: #1a3d7c;
-  }
+  /* 0–75% hvid, 75–100% fade til grøn */
+  background: linear-gradient(
+    to bottom,
+    #ffffff 0%,
+    #ffffff 75%,
+    rgb(52, 115, 61) 100%
+  );
 
-  .card {
-    background: white;
-    padding: 20px;
-    border-radius: 16px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-    animation: fadeIn 0.4s ease;
-  }
+  background-attachment: fixed;
+  color: #244c2f;
+}
 
-  .btn {
-    width: 100%;
-    padding: 18px;
-    margin: 12px 0;
-    font-size: 20px;
-    border: none;
-    border-radius: 12px;
-    background: #1a73e8;
-    color: white;
-    font-weight: 600;
-    box-shadow: 0 4px 12px rgba(26,115,232,0.3);
-    transition: 0.2s ease;
-  }
+/* Overskrifter */
+h2 {
+  text-align: center;
+  font-size: 28px;
+  margin-bottom: 20px;
+  font-weight: 700;
+  color: rgb(52, 115, 61);
+}
 
-  .btn:hover {
-    background: #155fc0;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(26,115,232,0.4);
-  }
+/* Kort / bokse */
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  animation: fadeIn 0.4s ease;
+  border-left: 6px solid rgb(52, 115, 61);
+}
 
-  #players {
-    animation: fadeIn 0.4s ease;
-  }
+/* Knapper */
+.btn {
+  width: 100%;
+  padding: 18px;
+  margin: 12px 0;
+  font-size: 20px;
+  border: none;
+  border-radius: 12px;
+  background: rgb(52, 115, 61);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(52, 115, 61, 0.3);
+  transition: 0.2s ease;
+}
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+.btn:hover {
+  background: rgb(72, 145, 82);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(72, 145, 82, 0.4);
+}
+
+/* Fade animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Hero sektion */
+.hero {
+  text-align: center;
+  padding: 70px 20px 50px;
+  animation: fadeIn 1.2s ease-out forwards;
+}
+
+.hero img {
+  max-width: 180px;
+  height: auto;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35));
+}
+
+.hero h1 {
+  font-size: 44px;
+  font-weight: 900;
+  margin: 0;
+  text-shadow: 0 3px 6px rgba(0,0,0,0.25);
+}
+
+.accent-line {
+  width: 120px;
+  height: 6px;
+  background: rgb(72, 145, 82);
+  margin: 20px auto 0;
+  border-radius: 3px;
+}
+
+@media (max-width: 600px) {
+  .hero h1 {
+    font-size: 32px;
   }
+  .hero img {
+    max-width: 140px;
+  }
+  .accent-line {
+    width: 90px;
+  }
+}
 </style>
 </head>
 
 <body>
 
+<header class="hero">
+  <img src="img/tjaereborg-gf-logo.png" alt="Tjæreborg GF logo">
+  <h1>Tjæreborg GF 125 år</h1>
+  <div class="accent-line"></div>
+</header>
+
 <h2>Kampens Spiller</h2>
 
-<div id="teams" class="card">
-  <button class="btn" onclick="selectTeam('hold1')">U13 piger</button>
-  <button class="btn" onclick="selectTeam('hold2')">Serie 2 herre senior</button>
-  <button class="btn" onclick="selectTeam('hold3')">Serie 3 dame senior</button>
-  <button class="btn" onclick="selectTeam('hold4')">Serie 2 dame senior</button>
-</div>
+<div id="teams" class="card"></div>
 
 <div id="players" class="card" style="display:none;">
   <h2>Vælg spiller</h2>
@@ -78,36 +130,97 @@
 </div>
 
 <script type="module">
-  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-  const supabase = createClient(
-    "https://jwejfmfrzwhgvjyfdvjy.supabase.co",
-    "sb_publishable_Mz0WlM2TToSWghb8TORA4w_EUZHT6Iz"
-  );
+const supabase = createClient(
+  "https://jwejfmfrzwhgvjyfdvjy.supabase.co",
+  "sb_publishable_Mz0WlM2TToSWghb8TORA4w_EUZHT6Iz"
+);
 
-  async function getPlayers(team) {
+// Unikt device ID
+let deviceId = localStorage.getItem("device_id");
+if (!deviceId) {
+  deviceId = crypto.randomUUID();
+  localStorage.setItem("device_id", deviceId);
+}
+
+// HENT HOLD (DISTINCT)
+async function loadTeams() {
+  const { data, error } = await supabase
+    .from("votes")
+    .select("team, match_time")
+    .order("match_time");
+
+  if (error) {
+    console.error("Fejl ved hentning af hold:", error);
+    return;
+  }
+
+  // Gruppér efter match_time
+  const groups = {};
+  data.forEach(row => {
+    if (!groups[row.match_time]) groups[row.match_time] = new Set();
+    groups[row.match_time].add(row.team);
+  });
+
+  const container = document.getElementById("teams");
+  container.innerHTML = "";
+
+  // Sortér tider (tekstsortering virker fordi alle tider er HH.MM)
+  const sortedTimes = Object.keys(groups).sort();
+
+  sortedTimes.forEach(time => {
+    // Tilføj overskrift for tidsgruppe
+    const h = document.createElement("h3");
+    h.textContent = `Kamp kl. ${time}`;
+    h.style.textAlign = "center";
+    h.style.color = "rgb(52,115,61)";
+    container.appendChild(h);
+
+    // Tilføj knapper for hold i denne tidsgruppe
+// Sortér så Tjæreborg altid står først
+const sortedTeams = Array.from(groups[time]).sort((a, b) => {
+  if (a.toLowerCase().includes("tjæreborg")) return -1;
+  if (b.toLowerCase().includes("tjæreborg")) return 1;
+  return a.localeCompare(b);
+});
+
+sortedTeams.forEach(team => {
+  const btn = document.createElement("button");
+  btn.className = "btn";
+  btn.textContent = team;
+  btn.onclick = () => selectTeam(team);
+  container.appendChild(btn);
+});
+
+  });
+}
+
+
+loadTeams();
+
+// HENT SPILLERE (DISTINCT)
+async function getPlayers(team) {
   const { data, error } = await supabase
     .from("votes")
     .select("player")
-    .eq("team", team);
+    .eq("team", team)
+    .neq("player", "placeholder")   // ← udelad placeholder
+    .order("player");
 
   if (error) {
     console.error("Fejl ved hentning af spillere:", error);
     return [];
   }
 
-  return data.map(row => row.player);
+  return [...new Set(data.map(row => row.player))];
 }
 
-  let selectedTeam = null;
 
-  let deviceId = localStorage.getItem("device_id");
-  if (!deviceId) {
-    deviceId = crypto.randomUUID();
-    localStorage.setItem("device_id", deviceId);
-  }
+let selectedTeam = null;
 
-  window.selectTeam = async function(team) {
+// VÆLG HOLD
+window.selectTeam = async function(team) {
   selectedTeam = team;
 
   const { data } = await supabase
@@ -139,22 +252,22 @@
   });
 };
 
+// STEM
+async function vote(team, player) {
+  await supabase.rpc("increment_vote", {
+    team_name: team,
+    player_name: player
+  });
 
-  async function vote(team, player) {
-    await supabase.rpc("increment_vote", {
-      team_name: team,
-      player_name: player
-    });
+  await supabase.from("user_votes").insert({
+    device_id: deviceId,
+    team: team,
+    player: player
+  });
 
-    await supabase.from("user_votes").insert({
-      device_id: deviceId,
-      team: team,
-      player: player
-    });
-
-    alert("Tak for din stemme!");
-    location.reload();
-  }
+  alert("Tak for din stemme!");
+  location.reload();
+}
 </script>
 
 </body>

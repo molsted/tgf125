@@ -153,22 +153,34 @@
   let table = null;
 
   window.login = async function() {
-    const input = document.getElementById("code").value;
+  const input = document.getElementById("code").value;
 
-    if (input !== ADMIN_CODE) {
-      alert("Forkert kode");
-      return;
-    }
+  const { data, error } = await supabase
+    .from("admin_settings")
+    .select("admin_password")
+    .limit(1)
+    .maybeSingle();
 
-    document.getElementById("loginCard").style.display = "none";
-    document.getElementById("results").style.display = "block";
+  if (error || !data) {
+    alert("Kunne ikke hente admin‑kode fra databasen.");
+    return;
+  }
 
-    table = document.getElementById("resultTable");
+  if (input !== data.admin_password) {
+    alert("Forkert kode");
+    return;
+  }
 
-    await loadData();
-    await loadTeams();
-    enableRealtime();
-  };
+  document.getElementById("loginCard").style.display = "none";
+  document.getElementById("results").style.display = "block";
+
+  table = document.getElementById("resultTable");
+
+  await loadData();
+  await loadTeams();
+  enableRealtime();
+};
+
 
   async function loadData() {
     const { data } = await supabase
@@ -219,23 +231,57 @@
   }
 
   async function loadTeams() {
-    const { data } = await supabase
-      .from("votes")
-      .select("team")
-      .order("team", { ascending: true });
+  const { data, error } = await supabase
+    .from("votes")
+    .select("team, match_time")
+    .order("match_time");
 
-    const uniqueTeams = [...new Set(data.map(r => r.team))];
-
-    const select = document.getElementById("teamSelect");
-    select.innerHTML = "";
-
-    uniqueTeams.forEach(team => {
-      const opt = document.createElement("option");
-      opt.value = team;
-      opt.textContent = team;
-      select.appendChild(opt);
-    });
+  if (error) {
+    console.error("Fejl ved hentning af hold:", error);
+    return;
   }
+
+  // Gruppér efter match_time
+  const groups = {};
+  data.forEach(row => {
+    if (!groups[row.match_time]) groups[row.match_time] = new Set();
+    groups[row.match_time].add(row.team);
+  });
+
+  const select = document.getElementById("teamSelect");
+  select.innerHTML = "";
+
+  // Sortér tider (HH.MM sorterer korrekt som tekst)
+  const sortedTimes = Object.keys(groups).sort();
+
+  sortedTimes.forEach(time => {
+    // Opret optgroup for tidsgruppen
+    const group = document.createElement("optgroup");
+    group.label = `Kamp kl. ${time}`;
+
+    // Sortér så Tjæreborg altid står først
+    const sortedTeams = Array.from(groups[time]).sort((a, b) => {
+      const aT = a.toLowerCase().includes("tjæreborg");
+      const bT = b.toLowerCase().includes("tjæreborg");
+
+      if (aT && !bT) return -1;
+      if (!aT && bT) return 1;
+
+      return a.localeCompare(b);
+    });
+
+    // Tilføj hold som options
+    sortedTeams.forEach(team => {
+      const option = document.createElement("option");
+      option.value = team;
+      option.textContent = team;
+      group.appendChild(option);
+    });
+
+    select.appendChild(group);
+  });
+}
+
 
   window.addTeam = async function() {
     const team = document.getElementById("newTeam").value.trim();
