@@ -158,7 +158,6 @@
     <table id="resultTable">
       <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th></tr>
     </table>
-    <button onclick="logout()" style="background:#c62828;">Log ud</button>
   </div>
 
   <div class="card">
@@ -169,10 +168,15 @@
 
   <div class="card">
     <h2>Tilføj Spiller</h2>
-    <select id="teamSelect"></select>
-    <input id="newPlayer" placeholder="Spillernavn">
-    <input id="newNumber" placeholder="Nummer">
-    <button onclick="addPlayer()">Tilføj Spiller</button>
+    <table id="resultTable">
+    	<tr>
+   			<select id="teamSelect"></select>
+    		<input id="newPlayer" placeholder="Spillernavn">
+    		<input id="newNumber" placeholder="Nummer">
+    		<button onclick="addPlayer()">Tilføj Spiller</button>
+    	</tr>
+    </table>
+    <button onclick="logout()" style="background:#c62828;">Log ud</button>
   </div>
 </div>
 
@@ -397,12 +401,32 @@ window.addPlayer = async function() {
   if (!number) return alert("Indtast spillernummer");
 
   showSpinner();
+
+  // 1. Find placeholder for holdet
+  const { data: placeholder, error: phError } = await supabase
+    .from("votes")
+    .select("match_time")
+    .eq("team", team)
+    .eq("player", "placeholder")
+    .maybeSingle();
+
+  if (phError || !placeholder) {
+    hideSpinner();
+    alert("Kunne ikke finde holdets tidspunkt. Er holdet oprettet korrekt?");
+    return;
+  }
+
+  const matchTime = placeholder.match_time;
+
+  // 2. Opret spiller med samme match_time
   await supabase.from("votes").insert({
     team: team,
     player: player,
     player_number: number,
-    votes: 0
+    votes: 0,
+    match_time: matchTime
   });
+
   hideSpinner();
 
   alert("Spiller tilføjet");
@@ -411,6 +435,7 @@ window.addPlayer = async function() {
 
   loadData();
 };
+
 </script>
 
 </body>
