@@ -334,13 +334,16 @@ function enableRealtime() {
 async function loadTeams() {
   showSpinner();
 
-  const { data } = await supabase
+  // Hent ALLE rækker – også placeholder
+  const { data, error } = await supabase
     .from("votes")
-    .select("team, match_time, player")
-    .neq("player", "placeholder");
+    .select("team, match_time");
 
   hideSpinner();
 
+  if (error || !data) return;
+
+  // Gruppér efter match_time
   const groups = {};
   data.forEach(row => {
     if (!groups[row.match_time]) groups[row.match_time] = new Set();
@@ -350,17 +353,24 @@ async function loadTeams() {
   const select = document.getElementById("teamSelect");
   select.innerHTML = "";
 
-  Object.keys(groups).sort().forEach(time => {
+  // Sortér tider
+  const sortedTimes = Object.keys(groups).sort();
+
+  sortedTimes.forEach(time => {
     const group = document.createElement("optgroup");
     group.label = `Kamp kl. ${time}`;
 
-    Array.from(groups[time]).sort((a, b) => {
+    // Sortér hold – Tjæreborg først
+    const sortedTeams = Array.from(groups[time]).sort((a, b) => {
       const aT = a.toLowerCase().includes("tjæreborg");
       const bT = b.toLowerCase().includes("tjæreborg");
       if (aT && !bT) return -1;
       if (!aT && bT) return 1;
       return a.localeCompare(b);
-    }).forEach(team => {
+    });
+
+    // Tilføj alle hold – også dem med kun placeholder
+    sortedTeams.forEach(team => {
       const option = document.createElement("option");
       option.value = team;
       option.textContent = team;
@@ -370,6 +380,7 @@ async function loadTeams() {
     select.appendChild(group);
   });
 }
+
 
 // ADD TEAM
 window.addTeam = async function() {
