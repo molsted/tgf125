@@ -150,6 +150,17 @@
   );
 
   let table = null;
+  
+  // AUTO-LOGIN HVIS TIDLIGERE LOGGET IND
+if (localStorage.getItem("admin_logged_in") === "true") {
+  document.getElementById("loginCard").style.display = "none";
+  document.getElementById("results").style.display = "block";
+  table = document.getElementById("resultTable");
+  loadData();
+  loadTeams();
+  enableRealtime();
+}
+
 
   // LOGIN
   window.login = async function() {
@@ -173,6 +184,7 @@
 
     document.getElementById("loginCard").style.display = "none";
     document.getElementById("results").style.display = "block";
+    localStorage.setItem("admin_logged_in", "true");
 
     table = document.getElementById("resultTable");
 
