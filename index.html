@@ -98,10 +98,42 @@ h2 {
   margin: 20px auto 0;
   border-radius: 3px;
 }
+
+/* SPINNER */
+#spinner {
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(255,255,255,0.85);
+  backdrop-filter: blur(3px);
+  z-index:9999;
+  align-items:center;
+  justify-content:center;
+}
+
+.spinner-circle {
+  width:60px;
+  height:60px;
+  border:6px solid #cde5d1;
+  border-top-color:#34733d;
+  border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform:rotate(0deg); }
+  to   { transform:rotate(360deg); }
+}
 </style>
 </head>
 
 <body>
+
+<!-- SPINNER -->
+<div id="spinner">
+  <div class="spinner-circle"></div>
+</div>
 
 <header class="hero">
   <img src="img/tjaereborg-gf-logo.png" alt="Tjæreborg GF logo">
@@ -139,24 +171,37 @@ if (!deviceId) {
 // FIX: definér variablen globalt
 let selectedTeam = null;
 
+// SPINNER HELPERS
+function showSpinner() {
+  document.getElementById("spinner").style.display = "flex";
+}
+
+function hideSpinner() {
+  document.getElementById("spinner").style.display = "none";
+}
+
 // HENT HOLD DER ER STEMT PÅ
 async function getVotedTeams() {
+  showSpinner();
   const { data } = await supabase
     .from("user_votes")
     .select("team")
     .eq("device_id", deviceId);
+  hideSpinner();
 
   return data ? data.map(r => r.team) : [];
 }
 
 // HENT SPILLERE
 async function getPlayers(team) {
+  showSpinner();
   const { data, error } = await supabase
     .from("votes")
     .select("player, player_number")
     .eq("team", team)
     .neq("player", "placeholder")
     .order("player_number");
+  hideSpinner();
 
   if (error) return [];
 
@@ -175,10 +220,12 @@ async function getPlayers(team) {
 
 // LOAD TEAMS
 async function loadTeams() {
+  showSpinner();
   const { data, error } = await supabase
     .from("votes")
     .select("team, match_time")
     .order("match_time");
+  hideSpinner();
 
   if (error) return;
 
@@ -239,12 +286,14 @@ window.goBack = function() {
 window.selectTeam = async function(team) {
   selectedTeam = team;
 
+  showSpinner();
   const { data } = await supabase
     .from("user_votes")
     .select("*")
     .eq("device_id", deviceId)
     .eq("team", team)
     .maybeSingle();
+  hideSpinner();
 
   if (data) {
     alert("Du har allerede stemt på dette hold.");
@@ -270,6 +319,7 @@ window.selectTeam = async function(team) {
 
 // STEM
 async function vote(team, player) {
+  showSpinner();
   await supabase.rpc("increment_vote", {
     team_name: team,
     player_name: player
@@ -280,6 +330,7 @@ async function vote(team, player) {
     team: team,
     player: player
   });
+  hideSpinner();
 
   alert("Tak for din stemme!");
 
