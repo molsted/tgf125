@@ -89,23 +89,59 @@
     background: #f5f8ff;
   }
 
-  .highlight {
-    animation: pulse 0.6s ease;
+  .time-divider {
+    background: #dfe7ff;
+    font-weight: bold;
+    text-align: center;
+    padding: 10px;
+    font-size: 18px;
+    border-top: 3px solid #1a3d7c;
+    border-bottom: 3px solid #1a3d7c;
   }
 
-  @keyframes pulse {
-    0% { background-color: #fff3b0; }
-    100% { background-color: inherit; }
+  .team-divider {
+    background: #eef3ff;
+    text-align: center;
+    padding: 6px;
+    font-size: 16px;
+    border-bottom: 2px solid #b8c6ff;
   }
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+  /* SPINNER */
+  #spinner {
+    display:none;
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:rgba(255,255,255,0.85);
+    backdrop-filter: blur(3px);
+    z-index:9999;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .spinner-circle {
+    width:60px;
+    height:60px;
+    border:6px solid #cde5d1;
+    border-top-color:#34733d;
+    border-radius:50%;
+    animation:spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform:rotate(0deg); }
+    to   { transform:rotate(360deg); }
   }
 </style>
 </head>
 
 <body>
+
+<!-- SPINNER -->
+<div id="spinner">
+  <div class="spinner-circle"></div>
+</div>
 
 <h2>Admin – Live Resultater</h2>
 
@@ -125,242 +161,256 @@
     <button onclick="logout()" style="background:#c62828;">Log ud</button>
   </div>
 
-  <!-- ADD TEAM -->
   <div class="card">
     <h2>Tilføj Hold</h2>
-    <input id="newTeam" placeholder="Holdnavn (fx 'U13 piger')">
+    <input id="newTeam" placeholder="Holdnavn">
     <button onclick="addTeam()">Tilføj Hold</button>
   </div>
 
-  <!-- ADD PLAYER -->
   <div class="card">
     <h2>Tilføj Spiller</h2>
     <select id="teamSelect"></select>
     <input id="newPlayer" placeholder="Spillernavn">
-    <input id="newNumber" placeholder="Nummer (fx 7)">
+    <input id="newNumber" placeholder="Nummer">
     <button onclick="addPlayer()">Tilføj Spiller</button>
   </div>
 </div>
 
 <script type="module">
-  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-  const supabase = createClient(
-    "https://jwejfmfrzwhgvjyfdvjy.supabase.co",
-    "sb_publishable_Mz0WlM2TToSWghb8TORA4w_EUZHT6Iz"
-  );
+const supabase = createClient(
+  "https://jwejfmfrzwhgvjyfdvjy.supabase.co",
+  "sb_publishable_Mz0WlM2TToSWghb8TORA4w_EUZHT6Iz"
+);
 
-  let table = null;
+let table = null;
 
-  // AUTO-LOGIN
+// SPINNER
+function showSpinner() {
+  document.getElementById("spinner").style.display = "flex";
+}
+function hideSpinner() {
+  document.getElementById("spinner").style.display = "none";
+}
+
+// AUTO LOGIN
+window.addEventListener("DOMContentLoaded", async () => {
   if (localStorage.getItem("admin_logged_in") === "true") {
     document.getElementById("loginCard").style.display = "none";
     document.getElementById("results").style.display = "block";
     table = document.getElementById("resultTable");
-    loadData();
-    loadTeams();
-    enableRealtime();
-  }
-
-  // LOGIN
-  window.login = async function() {
-    const input = document.getElementById("code").value;
-
-    const { data, error } = await supabase
-      .from("admin_settings")
-      .select("admin_password")
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !data) {
-      alert("Kunne ikke hente admin‑kode fra databasen.");
-      return;
-    }
-
-    if (input !== data.admin_password) {
-      alert("Forkert kode");
-      return;
-    }
-
-    localStorage.setItem("admin_logged_in", "true");
-
-    document.getElementById("loginCard").style.display = "none";
-    document.getElementById("results").style.display = "block";
-
-    table = document.getElementById("resultTable");
-
     await loadData();
     await loadTeams();
     enableRealtime();
-  };
+  }
+});
 
-  // LOGOUT
-  window.logout = function() {
-    localStorage.removeItem("admin_logged_in");
-    location.reload();
-  };
+// LOGIN
+window.login = async function() {
+  const input = document.getElementById("code").value;
 
-  // LOAD DATA – sorteret efter tid, Tjæreborg, stemmer, nummer
-  async function loadData() {
-    const { data } = await supabase
-      .from("votes")
-      .select("team, player, player_number, votes, match_time")
-      .neq("player", "placeholder");
+  const { data } = await supabase
+    .from("admin_settings")
+    .select("admin_password")
+    .maybeSingle();
 
-    if (!data) {
-      renderTable([]);
-      return;
+  if (!data || input !== data.admin_password) {
+    alert("Forkert kode");
+    return;
+  }
+
+  localStorage.setItem("admin_logged_in", "true");
+
+  document.getElementById("loginCard").style.display = "none";
+  document.getElementById("results").style.display = "block";
+
+  table = document.getElementById("resultTable");
+
+  await loadData();
+  await loadTeams();
+  enableRealtime();
+};
+
+// LOGOUT
+window.logout = function() {
+  localStorage.removeItem("admin_logged_in");
+  location.reload();
+};
+
+// LOAD DATA
+async function loadData() {
+  showSpinner();
+
+  const { data } = await supabase
+    .from("votes")
+    .select("team, player, player_number, votes, match_time")
+    .neq("player", "placeholder");
+
+  hideSpinner();
+
+  if (!data) return renderTable([]);
+
+  // SORTERING
+  data.sort((a, b) => {
+    if (a.match_time !== b.match_time)
+      return String(a.match_time).localeCompare(String(b.match_time));
+
+    const aT = a.team.toLowerCase().includes("tjæreborg");
+    const bT = b.team.toLowerCase().includes("tjæreborg");
+    if (aT && !bT) return -1;
+    if (!aT && bT) return 1;
+
+    if (a.team !== b.team)
+      return a.team.localeCompare(b.team);
+
+    if (a.votes !== b.votes)
+      return b.votes - a.votes;
+
+    const numA = a.player_number != null ? Number(a.player_number) : 9999;
+    const numB = b.player_number != null ? Number(b.player_number) : 9999;
+    if (numA !== numB) return numA - numB;
+
+    return a.player.localeCompare(b.player);
+  });
+
+  renderTable(data);
+}
+
+// RENDER TABLE WITH DIVIDERS
+function renderTable(data) {
+  table.innerHTML = `
+    <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th></tr>
+  `;
+
+  let lastTime = null;
+  let lastTeam = null;
+
+  data.forEach(row => {
+
+    if (row.match_time !== lastTime) {
+      const div = document.createElement("tr");
+      div.innerHTML = `<td colspan="4" class="time-divider">Kamp kl. ${row.match_time}</td>`;
+      table.appendChild(div);
+      lastTime = row.match_time;
+      lastTeam = null;
     }
 
-    data.sort((a, b) => {
-      // 1) Sortér efter kamp-tidspunkt
-      if (a.match_time !== b.match_time) {
-        return String(a.match_time).localeCompare(String(b.match_time));
-      }
+    if (row.team !== lastTeam) {
+      const div = document.createElement("tr");
+      div.innerHTML = `<td colspan="4" class="team-divider">${row.team}</td>`;
+      table.appendChild(div);
+      lastTeam = row.team;
+    }
 
-      // 2) Tjæreborg først inden for samme tidspunkt
-      const aT = a.team.toLowerCase().includes("tjæreborg");
-      const bT = b.team.toLowerCase().includes("tjæreborg");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${row.team}</td>
+      <td>${row.player_number ?? ""}</td>
+      <td>${row.player}</td>
+      <td>${row.votes}</td>
+    `;
+    table.appendChild(tr);
+  });
+}
+
+// REALTIME
+function enableRealtime() {
+  supabase
+    .channel("votes-changes")
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "votes" },
+      () => loadData()
+    )
+    .subscribe();
+}
+
+// LOAD TEAMS
+async function loadTeams() {
+  showSpinner();
+
+  const { data } = await supabase
+    .from("votes")
+    .select("team, match_time, player")
+    .neq("player", "placeholder");
+
+  hideSpinner();
+
+  const groups = {};
+  data.forEach(row => {
+    if (!groups[row.match_time]) groups[row.match_time] = new Set();
+    groups[row.match_time].add(row.team);
+  });
+
+  const select = document.getElementById("teamSelect");
+  select.innerHTML = "";
+
+  Object.keys(groups).sort().forEach(time => {
+    const group = document.createElement("optgroup");
+    group.label = `Kamp kl. ${time}`;
+
+    Array.from(groups[time]).sort((a, b) => {
+      const aT = a.toLowerCase().includes("tjæreborg");
+      const bT = b.toLowerCase().includes("tjæreborg");
       if (aT && !bT) return -1;
       if (!aT && bT) return 1;
-
-      // 3) Samme tidspunkt, forskellige hold → alfabetisk holdnavn
-      if (a.team !== b.team) {
-        return a.team.localeCompare(b.team);
-      }
-
-      // 4) Samme hold → sortér spillere:
-      //    først efter stemmer (flest først)
-      if (a.votes !== b.votes) return b.votes - a.votes;
-
-      // 5) Hvis stemmer = 0 (eller lige mange) → efter spillernummer
-      const numA = a.player_number != null ? Number(a.player_number) : 9999;
-      const numB = b.player_number != null ? Number(b.player_number) : 9999;
-      if (numA !== numB) return numA - numB;
-
-      // 6) Fallback: alfabetisk spillernavn
-      return a.player.localeCompare(b.player);
+      return a.localeCompare(b);
+    }).forEach(team => {
+      const option = document.createElement("option");
+      option.value = team;
+      option.textContent = team;
+      group.appendChild(option);
     });
 
-    renderTable(data);
-  }
+    select.appendChild(group);
+  });
+}
 
-  function renderTable(data) {
-    table.innerHTML = `
-      <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th></tr>
-    `;
+// ADD TEAM
+window.addTeam = async function() {
+  const team = document.getElementById("newTeam").value.trim();
+  if (!team) return alert("Indtast et holdnavn");
 
-    data.forEach(row => {
-      const tr = document.createElement("tr");
-      tr.id = `row-${row.team}-${row.player}`;
-      tr.innerHTML = `
-        <td>${row.team}</td>
-        <td>${row.player_number ?? ""}</td>
-        <td>${row.player}</td>
-        <td class="votes">${row.votes}</td>
-      `;
-      table.appendChild(tr);
-    });
-  }
+  showSpinner();
+  await supabase.from("votes").insert({
+    team: team,
+    player: "placeholder",
+    votes: 0
+  });
+  hideSpinner();
 
-  // REALTIME – reload + resort ved ændringer
-  function enableRealtime() {
-    supabase
-      .channel("votes-changes")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "votes" },
-        () => {
-          loadData();
-        }
-      )
-      .subscribe();
-  }
+  alert("Hold tilføjet");
+  document.getElementById("newTeam").value = "";
 
-  // LOAD TEAMS – filtrer placeholder + Tjæreborg først
-  async function loadTeams() {
-    const { data, error } = await supabase
-      .from("votes")
-      .select("team, match_time, player")
-      .neq("player", "placeholder")
-      .order("match_time");
+  loadTeams();
+  loadData();
+};
 
-    if (error || !data) return;
+// ADD PLAYER
+window.addPlayer = async function() {
+  const team = document.getElementById("teamSelect").value;
+  const player = document.getElementById("newPlayer").value.trim();
+  const number = document.getElementById("newNumber").value.trim();
 
-    const groups = {};
-    data.forEach(row => {
-      if (!groups[row.match_time]) groups[row.match_time] = new Set();
-      groups[row.match_time].add(row.team);
-    });
+  if (!player) return alert("Indtast spillernavn");
+  if (!number) return alert("Indtast spillernummer");
 
-    const select = document.getElementById("teamSelect");
-    select.innerHTML = "";
+  showSpinner();
+  await supabase.from("votes").insert({
+    team: team,
+    player: player,
+    player_number: number,
+    votes: 0
+  });
+  hideSpinner();
 
-    const sortedTimes = Object.keys(groups).sort();
+  alert("Spiller tilføjet");
+  document.getElementById("newPlayer").value = "";
+  document.getElementById("newNumber").value = "";
 
-    sortedTimes.forEach(time => {
-      const group = document.createElement("optgroup");
-      group.label = `Kamp kl. ${time}`;
-
-      const sortedTeams = Array.from(groups[time]).sort((a, b) => {
-        const aT = a.toLowerCase().includes("tjæreborg");
-        const bT = b.toLowerCase().includes("tjæreborg");
-        if (aT && !bT) return -1;
-        if (!aT && bT) return 1;
-        return a.localeCompare(b);
-      });
-
-      sortedTeams.forEach(team => {
-        const option = document.createElement("option");
-        option.value = team;
-        option.textContent = team;
-        group.appendChild(option);
-      });
-
-      select.appendChild(group);
-    });
-  }
-
-  // ADD TEAM – stadig med placeholder, men filtreret væk i visning
-  window.addTeam = async function() {
-    const team = document.getElementById("newTeam").value.trim();
-    if (!team) return alert("Indtast et holdnavn");
-
-    await supabase.from("votes").insert({
-      team: team,
-      player: "placeholder",
-      votes: 0
-    });
-
-    alert("Hold tilføjet. Tilføj nu spillere.");
-    document.getElementById("newTeam").value = "";
-
-    loadTeams();
-    loadData();
-  };
-
-  // ADD PLAYER
-  window.addPlayer = async function() {
-    const team = document.getElementById("teamSelect").value;
-    const player = document.getElementById("newPlayer").value.trim();
-    const number = document.getElementById("newNumber").value.trim();
-
-    if (!player) return alert("Indtast spillernavn");
-    if (!number) return alert("Indtast spillernummer");
-
-    await supabase.from("votes").insert({
-      team: team,
-      player: player,
-      player_number: number,
-      votes: 0
-    });
-
-    alert("Spiller tilføjet");
-    document.getElementById("newPlayer").value = "";
-    document.getElementById("newNumber").value = "";
-
-    loadData();
-  };
+  loadData();
+};
 </script>
 
 </body>
