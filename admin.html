@@ -144,8 +144,6 @@
 <script type="module">
   import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-  const ADMIN_CODE = "1234";
-
   const supabase = createClient(
     "https://jwejfmfrzwhgvjyfdvjy.supabase.co",
     "sb_publishable_Mz0WlM2TToSWghb8TORA4w_EUZHT6Iz"
@@ -153,48 +151,63 @@
 
   let table = null;
 
+  // LOGIN
   window.login = async function() {
-  const input = document.getElementById("code").value;
+    const input = document.getElementById("code").value;
 
-  const { data, error } = await supabase
-    .from("admin_settings")
-    .select("admin_password")
-    .limit(1)
-    .maybeSingle();
+    const { data, error } = await supabase
+      .from("admin_settings")
+      .select("admin_password")
+      .limit(1)
+      .maybeSingle();
 
-  if (error || !data) {
-    alert("Kunne ikke hente admin‑kode fra databasen.");
-    return;
-  }
+    if (error || !data) {
+      alert("Kunne ikke hente admin‑kode fra databasen.");
+      return;
+    }
 
-  if (input !== data.admin_password) {
-    alert("Forkert kode");
-    return;
-  }
+    if (input !== data.admin_password) {
+      alert("Forkert kode");
+      return;
+    }
 
-  document.getElementById("loginCard").style.display = "none";
-  document.getElementById("results").style.display = "block";
+    document.getElementById("loginCard").style.display = "none";
+    document.getElementById("results").style.display = "block";
 
-  table = document.getElementById("resultTable");
+    table = document.getElementById("resultTable");
 
-  await loadData();
-  await loadTeams();
-  enableRealtime();
-};
+    await loadData();
+    await loadTeams();
+    enableRealtime();
+  };
 
-
+  // LOAD DATA WITH ADVANCED SORTING
   async function loadData() {
     const { data } = await supabase
       .from("votes")
-      .select("*")
-      .order("team", { ascending: true });
+      .select("*");
+
+    // SORTERING:
+    // 1) Flest stemmer først
+    // 2) Hvis stemmer = 0 → sortér efter spillernummer
+    // 3) Hvis nummer mangler → alfabetisk spiller
+    data.sort((a, b) => {
+      if (a.votes !== b.votes) return b.votes - a.votes;
+
+      const numA = a.player_number ?? 9999;
+      const numB = b.player_number ?? 9999;
+
+      if (numA !== numB) return numA - numB;
+
+      return a.player.localeCompare(b.player);
+    });
 
     renderTable(data);
   }
 
   function renderTable(data) {
     table.innerHTML = `
-      <tr><th>Hold</th><th>Spiller</th><th>Stemmer</th></tr>
+      <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th></tr>
     `;
 
     data.forEach(row => {
@@ -203,13 +216,14 @@
       tr.innerHTML = `
         <td>${row.team}</td>
         <td>${row.player_number ?? ""}</td>
-		<td>${row.player}</td>
+        <td>${row.player}</td>
         <td class="votes">${row.votes}</td>
       `;
       table.appendChild(tr);
     });
   }
 
+  // REALTIME
   function enableRealtime() {
     supabase
       .channel("votes-changes")
@@ -217,74 +231,56 @@
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "votes" },
         payload => {
-          const row = payload.new;
-          const tr = document.getElementById(`row-${row.team}-${row.player}`);
-
-          if (tr) {
-            const votesCell = tr.querySelector(".votes");
-            votesCell.textContent = row.votes;
-
-            tr.classList.add("highlight");
-            setTimeout(() => tr.classList.remove("highlight"), 600);
-          }
+          loadData(); // Re-sortér ved hver ændring
         }
       )
       .subscribe();
   }
 
+  // LOAD TEAMS (same grouping + Tjæreborg first)
   async function loadTeams() {
-  const { data, error } = await supabase
-    .from("votes")
-    .select("team, match_time")
-    .order("match_time");
+    const { data, error } = await supabase
+      .from("votes")
+      .select("team, match_time")
+      .order("match_time");
 
-  if (error) {
-    console.error("Fejl ved hentning af hold:", error);
-    return;
+    if (error) return;
+
+    const groups = {};
+    data.forEach(row => {
+      if (!groups[row.match_time]) groups[row.match_time] = new Set();
+      groups[row.match_time].add(row.team);
+    });
+
+    const select = document.getElementById("teamSelect");
+    select.innerHTML = "";
+
+    const sortedTimes = Object.keys(groups).sort();
+
+    sortedTimes.forEach(time => {
+      const group = document.createElement("optgroup");
+      group.label = `Kamp kl. ${time}`;
+
+      const sortedTeams = Array.from(groups[time]).sort((a, b) => {
+        const aT = a.toLowerCase().includes("tjæreborg");
+        const bT = b.toLowerCase().includes("tjæreborg");
+        if (aT && !bT) return -1;
+        if (!aT && bT) return 1;
+        return a.localeCompare(b);
+      });
+
+      sortedTeams.forEach(team => {
+        const option = document.createElement("option");
+        option.value = team;
+        option.textContent = team;
+        group.appendChild(option);
+      });
+
+      select.appendChild(group);
+    });
   }
 
-  // Gruppér efter match_time
-  const groups = {};
-  data.forEach(row => {
-    if (!groups[row.match_time]) groups[row.match_time] = new Set();
-    groups[row.match_time].add(row.team);
-  });
-
-  const select = document.getElementById("teamSelect");
-  select.innerHTML = "";
-
-  // Sortér tider (HH.MM sorterer korrekt som tekst)
-  const sortedTimes = Object.keys(groups).sort();
-
-  sortedTimes.forEach(time => {
-    // Opret optgroup for tidsgruppen
-    const group = document.createElement("optgroup");
-    group.label = `Kamp kl. ${time}`;
-
-    // Sortér så Tjæreborg altid står først
-    const sortedTeams = Array.from(groups[time]).sort((a, b) => {
-      const aT = a.toLowerCase().includes("tjæreborg");
-      const bT = b.toLowerCase().includes("tjæreborg");
-
-      if (aT && !bT) return -1;
-      if (!aT && bT) return 1;
-
-      return a.localeCompare(b);
-    });
-
-    // Tilføj hold som options
-    sortedTeams.forEach(team => {
-      const option = document.createElement("option");
-      option.value = team;
-      option.textContent = team;
-      group.appendChild(option);
-    });
-
-    select.appendChild(group);
-  });
-}
-
-
+  // ADD TEAM
   window.addTeam = async function() {
     const team = document.getElementById("newTeam").value.trim();
     if (!team) return alert("Indtast et holdnavn");
@@ -302,28 +298,28 @@
     loadData();
   };
 
+  // ADD PLAYER
   window.addPlayer = async function() {
-  const team = document.getElementById("teamSelect").value;
-  const player = document.getElementById("newPlayer").value.trim();
-  const number = document.getElementById("newNumber").value.trim();
+    const team = document.getElementById("teamSelect").value;
+    const player = document.getElementById("newPlayer").value.trim();
+    const number = document.getElementById("newNumber").value.trim();
 
-  if (!player) return alert("Indtast spillernavn");
-  if (!number) return alert("Indtast spillernummer");
+    if (!player) return alert("Indtast spillernavn");
+    if (!number) return alert("Indtast spillernummer");
 
-  await supabase.from("votes").insert({
-    team: team,
-    player: player,
-    player_number: number,
-    votes: 0
-  });
+    await supabase.from("votes").insert({
+      team: team,
+      player: player,
+      player_number: number,
+      votes: 0
+    });
 
-  alert("Spiller tilføjet");
-  document.getElementById("newPlayer").value = "";
-  document.getElementById("newNumber").value = "";
+    alert("Spiller tilføjet");
+    document.getElementById("newPlayer").value = "";
+    document.getElementById("newNumber").value = "";
 
-  loadData();
-};
-
+    loadData();
+  };
 </script>
 
 </body>
