@@ -122,6 +122,7 @@
     <table id="resultTable">
       <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th></tr>
     </table>
+    <button onclick="logout()" style="background:#c62828;">Log ud</button>
   </div>
 
   <!-- ADD TEAM -->
@@ -150,17 +151,16 @@
   );
 
   let table = null;
-  
-  // AUTO-LOGIN HVIS TIDLIGERE LOGGET IND
-if (localStorage.getItem("admin_logged_in") === "true") {
-  document.getElementById("loginCard").style.display = "none";
-  document.getElementById("results").style.display = "block";
-  table = document.getElementById("resultTable");
-  loadData();
-  loadTeams();
-  enableRealtime();
-}
 
+  // AUTO-LOGIN
+  if (localStorage.getItem("admin_logged_in") === "true") {
+    document.getElementById("loginCard").style.display = "none";
+    document.getElementById("results").style.display = "block";
+    table = document.getElementById("resultTable");
+    loadData();
+    loadTeams();
+    enableRealtime();
+  }
 
   // LOGIN
   window.login = async function() {
@@ -182,9 +182,10 @@ if (localStorage.getItem("admin_logged_in") === "true") {
       return;
     }
 
+    localStorage.setItem("admin_logged_in", "true");
+
     document.getElementById("loginCard").style.display = "none";
     document.getElementById("results").style.display = "block";
-    localStorage.setItem("admin_logged_in", "true");
 
     table = document.getElementById("resultTable");
 
@@ -193,24 +194,51 @@ if (localStorage.getItem("admin_logged_in") === "true") {
     enableRealtime();
   };
 
-  // LOAD DATA WITH ADVANCED SORTING
+  // LOGOUT
+  window.logout = function() {
+    localStorage.removeItem("admin_logged_in");
+    location.reload();
+  };
+
+  // LOAD DATA – sorteret efter tid, Tjæreborg, stemmer, nummer
   async function loadData() {
     const { data } = await supabase
       .from("votes")
-      .select("*");
+      .select("team, player, player_number, votes, match_time")
+      .neq("player", "placeholder");
 
-    // SORTERING:
-    // 1) Flest stemmer først
-    // 2) Hvis stemmer = 0 → sortér efter spillernummer
-    // 3) Hvis nummer mangler → alfabetisk spiller
+    if (!data) {
+      renderTable([]);
+      return;
+    }
+
     data.sort((a, b) => {
+      // 1) Sortér efter kamp-tidspunkt
+      if (a.match_time !== b.match_time) {
+        return String(a.match_time).localeCompare(String(b.match_time));
+      }
+
+      // 2) Tjæreborg først inden for samme tidspunkt
+      const aT = a.team.toLowerCase().includes("tjæreborg");
+      const bT = b.team.toLowerCase().includes("tjæreborg");
+      if (aT && !bT) return -1;
+      if (!aT && bT) return 1;
+
+      // 3) Samme tidspunkt, forskellige hold → alfabetisk holdnavn
+      if (a.team !== b.team) {
+        return a.team.localeCompare(b.team);
+      }
+
+      // 4) Samme hold → sortér spillere:
+      //    først efter stemmer (flest først)
       if (a.votes !== b.votes) return b.votes - a.votes;
 
-      const numA = a.player_number ?? 9999;
-      const numB = b.player_number ?? 9999;
-
+      // 5) Hvis stemmer = 0 (eller lige mange) → efter spillernummer
+      const numA = a.player_number != null ? Number(a.player_number) : 9999;
+      const numB = b.player_number != null ? Number(b.player_number) : 9999;
       if (numA !== numB) return numA - numB;
 
+      // 6) Fallback: alfabetisk spillernavn
       return a.player.localeCompare(b.player);
     });
 
@@ -235,28 +263,29 @@ if (localStorage.getItem("admin_logged_in") === "true") {
     });
   }
 
-  // REALTIME
+  // REALTIME – reload + resort ved ændringer
   function enableRealtime() {
     supabase
       .channel("votes-changes")
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "votes" },
-        payload => {
-          loadData(); // Re-sortér ved hver ændring
+        () => {
+          loadData();
         }
       )
       .subscribe();
   }
 
-  // LOAD TEAMS (same grouping + Tjæreborg first)
+  // LOAD TEAMS – filtrer placeholder + Tjæreborg først
   async function loadTeams() {
     const { data, error } = await supabase
       .from("votes")
-      .select("team, match_time")
+      .select("team, match_time, player")
+      .neq("player", "placeholder")
       .order("match_time");
 
-    if (error) return;
+    if (error || !data) return;
 
     const groups = {};
     data.forEach(row => {
@@ -292,7 +321,7 @@ if (localStorage.getItem("admin_logged_in") === "true") {
     });
   }
 
-  // ADD TEAM
+  // ADD TEAM – stadig med placeholder, men filtreret væk i visning
   window.addTeam = async function() {
     const team = document.getElementById("newTeam").value.trim();
     if (!team) return alert("Indtast et holdnavn");
