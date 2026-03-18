@@ -98,7 +98,6 @@ h2 {
   margin: 20px auto 0;
   border-radius: 3px;
 }
-
 </style>
 </head>
 
@@ -136,6 +135,8 @@ if (!deviceId) {
   deviceId = crypto.randomUUID();
   localStorage.setItem("device_id", deviceId);
 }
+
+// FIX: definér variablen globalt
 let selectedTeam = null;
 
 // HENT HOLD DER ER STEMT PÅ
