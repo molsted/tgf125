@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kampens Spiller</title>
+
+<style>
+  body { 
+    font-family: 'Segoe UI', Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: linear-gradient(180deg, #e9f0ff, #f7f9ff);
+    color: #222;
+  }
+
+  h2 {
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 20px;
+    font-weight: 700;
+    color: #1a3d7c;
+  }
+
+  .card {
+    background: white;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    animation: fadeIn 0.4s ease;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 18px;
+    margin: 12px 0;
+    font-size: 20px;
+    border: none;
+    border-radius: 12px;
+    background: #1a73e8;
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(26,115,232,0.3);
+    transition: 0.2s ease;
+  }
+
+  .btn:hover {
+    background: #155fc0;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(26,115,232,0.4);
+  }
+
+  #players {
+    animation: fadeIn 0.4s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+
+<body>
+
+<h2>Kampens Spiller</h2>
+
+<div id="teams" class="card">
+  <button class="btn" onclick="selectTeam('hold1')">U13 piger</button>
+  <button class="btn" onclick="selectTeam('hold2')">Serie 2 herre senior</button>
+  <button class="btn" onclick="selectTeam('hold3')">Serie 3 dame senior</button>
+  <button class="btn" onclick="selectTeam('hold4')">Serie 2 dame senior</button>
+</div>
+
+<div id="players" class="card" style="display:none;">
+  <h2>Vælg spiller</h2>
+  <div id="playerButtons"></div>
+</div>
+
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+  const supabase = createClient(
+    "https://jwejfmfrzwhgvjyfdvjy.supabase.co",
+    "sb_publishable_Mz0WlM2TToSWghb8TORA4w_EUZHT6Iz"
+  );
+
+  async function getPlayers(team) {
+  const { data, error } = await supabase
+    .from("votes")
+    .select("player")
+    .eq("team", team);
+
+  if (error) {
+    console.error("Fejl ved hentning af spillere:", error);
+    return [];
+  }
+
+  return data.map(row => row.player);
+}
+
+  let selectedTeam = null;
+
+  let deviceId = localStorage.getItem("device_id");
+  if (!deviceId) {
+    deviceId = crypto.randomUUID();
+    localStorage.setItem("device_id", deviceId);
+  }
+
+  window.selectTeam = async function(team) {
+  selectedTeam = team;
+
+  const { data } = await supabase
+    .from("user_votes")
+    .select("*")
+    .eq("device_id", deviceId)
+    .eq("team", team)
+    .maybeSingle();
+
+  if (data) {
+    alert("Du har allerede stemt på dette hold.");
+    return;
+  }
+
+  document.getElementById("teams").style.display = "none";
+  document.getElementById("players").style.display = "block";
+
+  const container = document.getElementById("playerButtons");
+  container.innerHTML = "";
+
+  const players = await getPlayers(team);
+
+  players.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = p;
+    btn.onclick = () => vote(team, p);
+    container.appendChild(btn);
+  });
+};
+
+
+  async function vote(team, player) {
+    await supabase.rpc("increment_vote", {
+      team_name: team,
+      player_name: player
+    });
+
+    await supabase.from("user_votes").insert({
+      device_id: deviceId,
+      team: team,
+      player: player
+    });
+
+    alert("Tak for din stemme!");
+    location.reload();
+  }
+</script>
+
+</body>
+</html>
