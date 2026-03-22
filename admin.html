@@ -107,6 +107,50 @@
     border-bottom: 2px solid #b8c6ff;
   }
 
+  .action-btn {
+    width: auto;
+    padding: 6px 14px;
+    margin-top: 0;
+    font-size: 14px;
+    border-radius: 6px;
+    background: #e0e0e0;
+    color: #333;
+    box-shadow: none;
+    cursor: pointer;
+  }
+  .action-btn:hover {
+    background: #d0d0d0;
+    transform: none;
+    box-shadow: none;
+  }
+  .save-btn {
+    background: #4caf50;
+    color: white;
+  }
+  .save-btn:hover {
+    background: #43a047;
+  }
+  .cancel-btn {
+    background: #f44336;
+    color: white;
+    margin-left: 4px;
+  }
+  .cancel-btn:hover {
+    background: #e53935;
+  }
+  .edit-input {
+    width: 60px;
+    padding: 6px;
+    margin-top: 0;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    background: #fff;
+    box-sizing: border-box;
+  }
+  .edit-input.player-input {
+    width: 140px;
+  }
+
   /* SPINNER */
   #spinner {
     display:none;
@@ -156,7 +200,7 @@
   <div class="card">
     <h2>Live Resultater</h2>
     <table id="resultTable">
-      <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th></tr>
+      <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th><th>Handling</th></tr>
     </table>
   </div>
 
@@ -189,6 +233,8 @@ const supabase = createClient(
 );
 
 let table = null;
+let currentData = [];
+let editingIds = new Set();
 
 // SPINNER
 function showSpinner() {
@@ -248,7 +294,7 @@ async function loadData() {
 
   const { data } = await supabase
     .from("votes")
-    .select("team, player, player_number, votes, match_time")
+    .select("id, team, player, player_number, votes, match_time")
     .neq("player", "placeholder");
 
   hideSpinner();
@@ -278,13 +324,14 @@ async function loadData() {
     return a.player.localeCompare(b.player);
   });
 
+  currentData = data;
   renderTable(data);
 }
 
 // RENDER TABLE WITH DIVIDERS
 function renderTable(data) {
   table.innerHTML = `
-    <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th></tr>
+    <tr><th>Hold</th><th>Nr.</th><th>Spiller</th><th>Stemmer</th><th>Handling</th></tr>
   `;
 
   let lastTime = null;
@@ -294,7 +341,7 @@ function renderTable(data) {
 
     if (row.match_time !== lastTime) {
       const div = document.createElement("tr");
-      div.innerHTML = `<td colspan="4" class="time-divider">Kamp kl. ${row.match_time}</td>`;
+      div.innerHTML = `<td colspan="5" class="time-divider">Kamp kl. ${row.match_time}</td>`;
       table.appendChild(div);
       lastTime = row.match_time;
       lastTeam = null;
@@ -302,21 +349,76 @@ function renderTable(data) {
 
     if (row.team !== lastTeam) {
       const div = document.createElement("tr");
-      div.innerHTML = `<td colspan="4" class="team-divider">${row.team}</td>`;
+      div.innerHTML = `<td colspan="5" class="team-divider">${row.team}</td>`;
       table.appendChild(div);
       lastTeam = row.team;
     }
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${row.team}</td>
-      <td>${row.player_number ?? ""}</td>
-      <td>${row.player}</td>
-      <td>${row.votes}</td>
-    `;
+    if (editingIds.has(row.id)) {
+      tr.innerHTML = `
+        <td>${row.team}</td>
+        <td><input type="number" id="edit-num-${row.id}" class="edit-input" value="${row.player_number ?? ""}"></td>
+        <td><input type="text" id="edit-name-${row.id}" class="edit-input player-input" value="${row.player}"></td>
+        <td>${row.votes}</td>
+        <td>
+          <button class="action-btn save-btn" onclick="saveRow('${row.id}')">Gem</button>
+          <button class="action-btn cancel-btn" onclick="cancelEdit('${row.id}')">Annuller</button>
+        </td>
+      `;
+    } else {
+      tr.innerHTML = `
+        <td>${row.team}</td>
+        <td>${row.player_number ?? ""}</td>
+        <td>${row.player}</td>
+        <td>${row.votes}</td>
+        <td>
+          <button class="action-btn" onclick="editRow('${row.id}')">Ret</button>
+        </td>
+      `;
+    }
     table.appendChild(tr);
   });
 }
+
+// EDIT ACTIONS
+window.editRow = function(id) {
+  editingIds.add(id);
+  renderTable(currentData);
+};
+
+window.cancelEdit = function(id) {
+  editingIds.delete(id);
+  renderTable(currentData);
+};
+
+window.saveRow = async function(id) {
+  const newNum = document.getElementById(`edit-num-${id}`).value.trim();
+  const newName = document.getElementById(`edit-name-${id}`).value.trim();
+
+  if (!newName) {
+    alert("Spillernavn kan ikke være tomt");
+    return;
+  }
+
+  showSpinner();
+  const { error } = await supabase
+    .from("votes")
+    .update({
+      player_number: newNum || null,
+      player: newName
+    })
+    .eq("id", id);
+  hideSpinner();
+
+  if (error) {
+    alert("Fejl ved gemning: " + error.message);
+    return;
+  }
+
+  editingIds.delete(id);
+  await loadData();
+};
 
 // REALTIME
 function enableRealtime() {
